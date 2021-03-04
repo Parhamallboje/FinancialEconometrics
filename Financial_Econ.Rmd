@@ -1,7 +1,7 @@
 ---
-title: "Financial Econometrics |CW3 -  Individual coursework"
+title: "Financial Econometrics -  Individual coursework"
 author:
-- Parham Allboje (01978793)
+- Parham Allboje
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   pdf_document:
@@ -25,7 +25,7 @@ library(gridExtra)
 ## Question 1
 
 ```{r}
-sp500 <- read_excel("SP500WeekDays.xlsx")
+sp500 <- read_excel("data/SP500WeekDays.xlsx")
 
 sp500_lm <- lm(sp500$sp ~ sp500$T + sp500$W +sp500$R + sp500$F)
 summary(sp500_lm)
@@ -42,7 +42,7 @@ Using the HAC estimator of the covariance matrix shows that now none of the week
 ## Question 2
 ### i.
 ```{r}
-usMacro <- read_excel("USMacro_Quarterly.xls")
+usMacro <- read_excel("data/USMacro_Quarterly.xls")
 
 usMacro<- usMacro %>% filter(Date >= '1955:01')
 usMacro$logYt = log(usMacro$RealGDP)
