@@ -1,0 +1,372 @@
+---
+title: "Financial Econometrics |CW3 -  Individual coursework"
+author:
+- Parham Allboje (01978793)
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+---
+
+```{r echo = T, results = 'hide', error=FALSE, warning=FALSE, message=FALSE}
+library(readxl)
+library(dynlm)
+library(sandwich)
+library(lmtest)
+library(tseries)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+
+## Question 1
+
+```{r}
+sp500 <- read_excel("SP500WeekDays.xlsx")
+
+sp500_lm <- lm(sp500$sp ~ sp500$T + sp500$W +sp500$R + sp500$F)
+summary(sp500_lm)
+```
+
+For the intercept in this linear model I chose the value for Monday to avoid the Dummy Variable trap. The Dummy Variable trap is a scenario in which the independent variables are multicollinear, meaning adding a fifth weekday does not add any information to the regression. Therefore, we regress over the other weekdays. Accordingly, it is observable that none of the weekday effects are significant at the 5% level. Only tuesday with a p.value of 0.599 and a t-statistic of 1.882 can be considered to be significant at 10% level.
+
+```{r}
+coeftest(sp500_lm, vcov = NeweyWest,)
+```
+Using the HAC estimator of the covariance matrix shows that now none of the weekdays are statistically significant neither at the 5% level nor at the 10% level. The HAC estimator changes the significance of the Tuesday regressor, which is not significant at 10% level anymore.
+
+
+## Question 2
+### i.
+```{r}
+usMacro <- read_excel("USMacro_Quarterly.xls")
+
+usMacro<- usMacro %>% filter(Date >= '1955:01')
+usMacro$logYt = log(usMacro$RealGDP)
+usMacro$deltaYt = usMacro$logYt - lag(usMacro$logYt, 1)
+deltaYt =na.omit(usMacro$deltaYt)
+meanDeltaYt = mean(deltaYt)
+meanDeltaYt_annualPct = meanDeltaYt*400
+sigmaDeltaYt = sd(deltaYt)
+sigmaDeltaYt_annualPct = sigmaDeltaYt*400
+```
+
+#### a)
+
+```{r, echo=F}
+message(paste("Mean of delta Yt is: ", sprintf("%0.3f", meanDeltaYt),".", sep = ""))
+```
+#### b)
+
+```{r, echo=F}
+message(paste("Mean growth rate in percentage points at an annual rate is: ", sprintf("%0.3f", meanDeltaYt_annualPct),".", sep = ""))
+```
+
+#### c)
+```{r, echo=F}
+message(paste("Volatility of delta Yt in percentage points at an annual rate is: ", sprintf("%0.3f", sigmaDeltaYt_annualPct),".", sep = ""))
+```
+
+#### d)
+```{r}
+acf(deltaYt, lag.max = 4, plot = FALSE)
+```
+This pattern reveals that deltaYt follows an autoregressive process, as the sample autocorrelation function decays quickly for the first few lags and probably revolves around zero for higher lag orders Units are quarterly growth rates. Units are quarterly rates of growth as deltaYt is the change in quarterly rate of growth.
+
+### ii.
+```{r}
+usMacro_AR1 <- dynlm(ts(usMacro$deltaYt) ~ L(ts(usMacro$deltaYt, 1)))
+coeftest(usMacro_AR1, vcoc.= sandwich, type = "NeweyWest")
+```
+
+```{r, echo = F}
+message(paste("Estimated Coefficient: ", sprintf("%0.3f", summary(usMacro_AR1)$coefficients[2,1]),".", sep = ""))
+message(paste("Coefficient is significantly different from zero, check p-value: ", summary(usMacro_AR1)$coefficients[2,4],".", sep = ""))
+```
+
+Confidence Interval
+```{r}
+print("Confidence Interval:")
+confint(usMacro_AR1, level = 0.95)
+```
+
+#### a)
+```{r}
+usMacro_AR2 <- dynlm(ts(usMacro$deltaYt) ~ L(ts(usMacro$deltaYt, 1)) +L(ts(usMacro$deltaYt, 2)))
+coeftest(usMacro_AR2, vcoc.= sandwich, type = "NeweyWest")
+```
+
+```{r, echo = F}
+message(paste("Estimated Coefficient for AR(2): ", sprintf("%0.3f", summary(usMacro_AR2)$coefficients[3,1]),".", sep = ""))
+message(paste("Coefficient is not  significantly different from zero, check p-value: ",summary(usMacro_AR2)$coefficients[3,4],".", sep = ""))
+message(paste("R^2-AR(1)=",sprintf("%0.3f", summary(usMacro_AR1)$r.squared),"; R^2-AR(2)",sprintf("%0.3f", summary(usMacro_AR2)$r.squared) , ".", sep = ""))
+```
+
+
+Even though based on R^2 the AR(2) model seems to explain the results better but only slightly.As AR2 adds one variable to the equation this makes sense. Let us look at the adjusted R^2:
+```{r, echo = F}
+message(paste("R^2-AR(1)=",sprintf("%0.3f", summary(usMacro_AR1)$adj.r.squared),"; R^2-AR(2)",sprintf("%0.3f", summary(usMacro_AR2)$adj.r.squared) , ".", sep = ""))
+```
+The better explanation decreases, but Adjusted R^2 is still higher. However, this model appears not to be preferable to AR(1) still as the probability of  AR(2) coefficient not being zero is not significant at 5%, 10% or 15% level.
+
+#### b)
+```{r}
+usMacro_AR3 <- dynlm(ts(usMacro$deltaYt) ~ L(ts(usMacro$deltaYt, 1)) +L(ts(usMacro$deltaYt, 2))+L(ts(usMacro$deltaYt, 3)))
+coeftest(usMacro_AR3, vcoc.= sandwich, type = "NeweyWest")
+```
+
+
+```{r}
+usMacro_AR4 <- dynlm(ts(usMacro$deltaYt) ~ L(ts(usMacro$deltaYt, 1)) +L(ts(usMacro$deltaYt, 2))+L(ts(usMacro$deltaYt, 3)) +L(ts(usMacro$deltaYt, 4)))
+coeftest(usMacro_AR4, vcoc.= sandwich, type = "NeweyWest")
+```
+
+
+```{r}
+BIC <- function(model) {
+  ssr <- sum(model$residuals^2)
+  t <- length(model$residuals)
+  npar <- length(model$coef)
+  return(round((log(ssr/t) + npar * log(t)/t), 4))
+}
+BICVector <- c("AR1"=BIC(usMacro_AR1), "AR2"=BIC(usMacro_AR2),"AR3"= BIC(usMacro_AR3),"AR4"= BIC(usMacro_AR4))
+BICVector
+message(paste("The Bayes information criterion (BIC)choses: ", which.min(BICVector)," lag(s).", sep = ""))
+```
+
+```{r}
+AIC <- function(model) {
+  ssr <- sum(model$residuals^2)
+  t <- length(model$residuals)
+  npar <- length(model$coef)
+  return(round((log(ssr/t) + npar * 2/t), 4))
+}
+AICVector <- c("AR1"=AIC(usMacro_AR1), "AR2"=AIC(usMacro_AR2),"AR3"= AIC(usMacro_AR3),"AR4"= AIC(usMacro_AR4))
+AICVector
+message(paste("Akaike information criterion (AIC) choses: ", which.min(AICVector)," lag(s).", sep = ""))
+```
+
+### iii.
+```{r}
+adf.test(deltaYt)
+```
+TheAugmented Dickey Fuller test yields a statistic of -5.6627 (<-3.43) and a p-value of 0.01 which is significant at the 1% level.Therefore we reject H0 that Yt is an autoregressive root. In contrast, Yt appears to be stationary around a deterministic trend. 
+
+## Question 3
+#### a)
+Using the Augmented Dickey Fuller critical values for intercept included regressions we cannot reject H0: beta=0 for both the Canadian/US inflation rates.  Therefore these variables are not stationary. Looking at the deltas of inflation rates it is observable that t statistics for US/Canada are both significant at the 1% level (|-5.24|,|-4.31| > 2.58) and so H0:beta=0 (unit root) is rejected in favour of H1:  beta=1. Thus, both inflation rates are stationary.
+
+#### b)
+A Engle-Granger Augmented Dickey Fuller statistic of -7.34 being lower than -5.07 (1% significance for 4 variables) means that it is highly significant. H0: beta=0 for the residuals can be rejected in favor of the alternate of cointegration and stationarity.  
+
+#### c)
+Knowing that a cointegration coefficient exists by which calculated residuals are stationary, I would use a Dickey Fuller test with a cointegration coefficient of 1. If the Dickey Fuller test is significant the we can reject H0: beta=0 in favour of the residuals being stationary. Having this one can say that the cointegrating coefficient is 1 thus the US/Canada inflation rates are cointegrated.
+
+#### d)
+No a rejction of H0 of a unit cointergrating coefficient is not sufficient. It says in Stock & Watson that "cointegration tests can be misleading (they can
+improperly reject the null hypothesis of no cointegration more frequently than they should, and frequently they improperly fail to reject the null hypothesis". Therefore main emphasis when estimating/using cointegrating relationships should be laid on economic theory, domain knowledge, and common sense.
+
+## Question 4
+
+Functions
+```{r}
+MonteCarloSimulation <- function(T) {
+x <- w <- rnorm(n = T, mean = 0, sd = 1)
+for (t in 2:T) {
+    x[t] <- x[t - 1] + w[t]
+}
+return (x)
+}
+
+MonteCarloRegression <- function(T) {
+MC1 <- MonteCarloSimulation(T)
+MC2 <- MonteCarloSimulation(T)
+MC_LM <- lm(MC1 ~ MC2)
+return (MC_LM)
+}
+
+MultipleMC <- function(T,N) {
+R2s<- vector()
+tvals <- vector()
+
+for (i in 1:N) {
+  MC <- MonteCarloRegression(T)
+  R2s[[i]]<-summary(MC)$r.squared
+  tvals[[i]]<-summary(MC)$coefficients[2,3]
+}
+return(list(R2s,tvals))
+}
+```
+
+
+#### a)
+```{r}
+MC_regression <- MonteCarloRegression(1000)
+summary(MC_regression)
+```
+
+```{r, echo=F}
+message(paste("The t-statistic for H0: b1=0 using 5% critical value of 1.96 is: ", summary(MC_regression)$coefficients[2,3],".", sep = ""))
+message(paste("The Regression Rsquared is: ", summary(MC_regression)$r.squared, ".", sep = ""))
+```
+#### b)
+```{r}
+MC_1000_1000 <- MultipleMC(T=1000,N=1000)
+df <- data.frame(MC_1000_1000[1], MC_1000_1000[2])
+names(df) <- c('MC_1000_1000_r2s', 'MC_1000_1000_tvals')
+plot_ggplot_MC_1000_1000_r2s <- ggplot(df, aes(x=MC_1000_1000_r2s)) +
+    geom_histogram(binwidth=.1, colour="blue", fill="white")
+plot_ggplot_MC_1000_1000_tvals <- ggplot(df, aes(x=MC_1000_1000_tvals)) +
+    geom_histogram(binwidth=10, colour="blue", fill="white")
+grid.arrange(plot_ggplot_MC_1000_1000_r2s, plot_ggplot_MC_1000_1000_tvals, ncol=2)
+```
+
+Percentiles:
+R^2:
+```{r}
+quantile(unlist(MC_1000_1000[1]), probs = c(0.05, 0.5, 0.95))
+```
+
+T-value:
+```{r}
+quantile(unlist( MC_1000_1000[2]), probs = c(0.05, 0.5, 0.95))
+```
+
+```{r}
+message(paste("Fraction of t-statistic exceeding 1.96 for N=1000 is: ", (sum(abs(unlist( MC_1000_1000[2])) > 1.96))/1000,".", sep = ""))
+```
+
+
+
+#### c)
+```{r}
+MC_1000_50 <- MultipleMC(T=1000,N=50)
+df['MC_1000_50_r2s'] <-  MC_1000_50[1]
+df['MC_1000_50_tvals'] <- MC_1000_50[2]
+#ggplot(df, aes(x=MC_1000_50_r2s)) + geom_histogram(binwidth=.1, colour="blue", fill="white")
+plot_ggplot_MC_1000_50_r2s <- ggplot(df, aes(x=MC_1000_50_r2s)) +
+    geom_histogram(binwidth=.1, colour="blue", fill="white")
+plot_ggplot_MC_1000_50_tvals <- ggplot(df, aes(x=MC_1000_50_tvals)) +
+    geom_histogram(binwidth=10, colour="blue", fill="white")
+grid.arrange(plot_ggplot_MC_1000_50_r2s, plot_ggplot_MC_1000_50_tvals, ncol=2)
+```
+
+
+Percentiles:
+R^2:
+```{r}
+quantile(unlist(MC_1000_50[1]), probs = c(0.05, 0.5, 0.95))
+```
+
+T-value:
+```{r}
+quantile(unlist( MC_1000_50[2]), probs = c(0.05, 0.5, 0.95))
+```
+
+```{r}
+message(paste("Fraction of t-statistic exceeding 1.96 for N=50 is: ", (sum(abs(unlist( MC_1000_50[2])) > 1.96))/1000,".", sep = ""))
+```
+
+```{r}
+message(paste("Fraction of t-statistic exceeding 1.96: ", (sum(abs(unlist( MC_1000_50[2])) > 1.96))/1000,".", sep = ""))
+```
+
+
+```{r}
+MC_1000_100 <- MultipleMC(T=1000,N=100)
+df['MC_1000_100_r2s'] <-  MC_1000_100[1]
+df['MC_1000_100_tvals'] <- MC_1000_100[2]
+plot_ggplot_MC_1000_100_r2s <- ggplot(df, aes(x=MC_1000_100_r2s)) +
+    geom_histogram(binwidth=.1, colour="blue", fill="white")
+plot_ggplot_MC_1000_100_tvals <- ggplot(df, aes(x=MC_1000_100_tvals)) +
+    geom_histogram(binwidth=10, colour="blue", fill="white")
+grid.arrange(plot_ggplot_MC_1000_100_r2s, plot_ggplot_MC_1000_100_tvals, ncol=2)
+```
+
+
+Percentiles:
+R^2:
+```{r}
+quantile(unlist(MC_1000_100[1]), probs = c(0.05, 0.5, 0.95))
+```
+
+T-value:
+```{r}
+quantile(unlist( MC_1000_100[2]), probs = c(0.05, 0.5, 0.95))
+```
+
+```{r}
+message(paste("Fraction of t-statistic exceeding 1.96 for N=100 is: ", (sum(abs(unlist( MC_1000_100[2])) > 1.96))/1000,".", sep = ""))
+```
+
+```{r}
+message(paste("Fraction of t-statistic exceeding 1.96: ", (sum(abs(unlist( MC_1000_100[2])) > 1.96))/1000,".", sep = ""))
+```
+
+```{r}
+MC_1000_200 <- MultipleMC(T=1000,N=200)
+df['MC_1000_200_r2s'] <-  MC_1000_200[1]
+df['MC_1000_200_tvals'] <- MC_1000_200[2]
+plot_ggplot_MC_1000_200_r2s <- ggplot(df, aes(x=MC_1000_200_r2s)) +
+    geom_histogram(binwidth=.1, colour="blue", fill="white")
+plot_ggplot_MC_1000_200_tvals <- ggplot(df, aes(x=MC_1000_200_tvals)) +
+    geom_histogram(binwidth=10, colour="blue", fill="white")
+grid.arrange(plot_ggplot_MC_1000_200_r2s, plot_ggplot_MC_1000_200_tvals, ncol=2)
+```
+
+
+Percentiles:
+R^2:
+```{r}
+quantile(unlist(MC_1000_200[1]), probs = c(0.05, 0.5, 0.95))
+```
+
+T-value:
+```{r}
+quantile(unlist( MC_1000_200[2]), probs = c(0.05, 0.5, 0.95))
+```
+
+```{r}
+message(paste("Fraction of t-statistic exceeding 1.96 for N=200 is: ", (sum(abs(unlist( MC_1000_200[2])) > 1.96))/1000,".", sep = ""))
+```
+
+```{r}
+message(paste("Fraction of t-statistic exceeding 1.96: ", (sum(abs(unlist( MC_1000_200[2])) > 1.96))/1000,".", sep = ""))
+```
+
+```{r}
+MC_1000_500 <- MultipleMC(T=1000,N=500)
+df['MC_1000_500_r2s'] <-  MC_1000_500[1]
+df['MC_1000_500_tvals'] <- MC_1000_500[2]
+plot_ggplot_MC_1000_500_r2s <- ggplot(df, aes(x=MC_1000_500_r2s)) +
+    geom_histogram(binwidth=.1, colour="blue", fill="white")
+plot_ggplot_MC_1000_500_tvals <- ggplot(df, aes(x=MC_1000_500_tvals)) +
+    geom_histogram(binwidth=10, colour="blue", fill="white")
+grid.arrange(plot_ggplot_MC_1000_500_r2s, plot_ggplot_MC_1000_500_tvals, ncol=2)
+```
+
+
+Percentiles:
+R^2:
+```{r}
+quantile(unlist(MC_1000_500[1]), probs = c(0.05, 0.5, 0.95))
+```
+
+T-value:
+```{r}
+quantile(unlist( MC_1000_500[2]), probs = c(0.05, 0.5, 0.95))
+```
+
+```{r}
+message(paste("Fraction of t-statistic exceeding 1.96 for N=500 is: ", (sum(abs(unlist( MC_1000_500[2])) > 1.96))/1000,".", sep = ""))
+```
+
+```{r}
+message(paste("Fraction of t-statistic exceeding 1.96: ", (sum(abs(unlist( MC_1000_500[2])) > 1.96))/1000,".", sep = ""))
+```
+
+
+With increasing sample size we reject the Null Hypothesis pretty much approaches 5%, when looking at the fraction being roughly around 50 of 1000. The t-statistic also looks more and more like a normal distribution the higher the T. Essentially this will continue for larger T, proven by the Central Limit Theorem, which says that when independent random variables are added, their properly normalized sum tends toward a normal distribution. 
